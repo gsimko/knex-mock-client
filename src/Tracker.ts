@@ -76,7 +76,8 @@ export class Tracker {
               } else {
                 const data =
                   typeof handler.data === 'function' ? await handler.data(rawQuery) : handler.data;
-                resolve(cloneDeep(Tracker.applyPostOp(data, rawQuery)));
+                if (data instanceof Error) reject(data);
+                else resolve(cloneDeep(Tracker.applyPostOp(data, rawQuery)));
               }
 
               if (handler.once) {
