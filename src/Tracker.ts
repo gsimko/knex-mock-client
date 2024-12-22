@@ -2,7 +2,6 @@ import cloneDeep from 'lodash.clonedeep';
 import { FunctionQueryMatcher, QueryMatcher, RawQuery } from '../types/mock-client';
 import { queryMethods, transactionCommands } from './constants';
 import { MockConnection } from './MockConnection';
-import { isUsingFakeTimers } from './utils';
 
 export type TransactionState = {
   id: number;
@@ -53,51 +52,41 @@ export class Tracker {
   }
 
   public _handle(connection: MockConnection, rawQuery: RawQuery): Promise<any> {
-    return new Promise((resolve, reject) => {
-      setTimeout(async () => {
-        if (this.receiveTransactionCommand(connection, rawQuery)) {
-          return resolve(undefined);
-        }
+    return new Promise(async (resolve, reject) => {
+      if (this.receiveTransactionCommand(connection, rawQuery)) {
+        return resolve(undefined);
+      }
 
-        this.history.all.push(rawQuery);
+      this.history.all.push(rawQuery);
 
-        const possibleMethods: RawQuery['method'][] = [rawQuery.method, 'any'];
-        for (const method of possibleMethods) {
-          const handlers: Handler[] = this.responses.get(method) || [];
+      const possibleMethods: RawQuery['method'][] = [rawQuery.method, 'any'];
+      for (const method of possibleMethods) {
+        const handlers: Handler[] = this.responses.get(method) || [];
 
-          for (let i = 0; i < handlers.length; i++) {
-            const handler = handlers[i];
+        for (let i = 0; i < handlers.length; i++) {
+          const handler = handlers[i];
 
-            if (handler.match(rawQuery)) {
-              this.history[method].push(rawQuery);
+          if (handler.match(rawQuery)) {
+            this.history[method].push(rawQuery);
 
-              if (handler.error) {
-                reject(handler.error instanceof Error ? handler.error : new Error(handler.error));
-              } else {
-                const data =
-                  typeof handler.data === 'function' ? await handler.data(rawQuery) : handler.data;
-                if (data instanceof Error) reject(data);
-                else resolve(cloneDeep(Tracker.applyPostOp(data, rawQuery)));
-              }
-
-              if (handler.once) {
-                handlers.splice(i, 1);
-              }
-              return;
+            if (handler.error) {
+              reject(handler.error instanceof Error ? handler.error : new Error(handler.error));
+            } else {
+              const data =
+                typeof handler.data === 'function' ? await handler.data(rawQuery) : handler.data;
+              if (data instanceof Error) reject(data);
+              else resolve(cloneDeep(Tracker.applyPostOp(data, rawQuery)));
             }
+
+            if (handler.once) {
+              handlers.splice(i, 1);
+            }
+            return;
           }
         }
-
-        reject(new Error(`Mock handler not found`));
-      }, 0);
-
-      if (isUsingFakeTimers()) {
-        /**
-         * Based on https://github.com/testing-library/react-testing-library/commit/403aa5cd8479c9778174fad76b59b02a470c7d1b
-         * without this, a test using fake timers would never get microtasks actually flushed.
-         */
-        jest.advanceTimersByTime(0);
       }
+
+      reject(new Error(`Mock handler not found`));
     });
   }
 
